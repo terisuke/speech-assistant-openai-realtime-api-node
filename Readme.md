@@ -1,76 +1,73 @@
-#  Speech Assistant with Twilio Voice and the OpenAI Realtime API (Node.js)
+#  Twilio VoiceとOpenAI Realtime APIを使用した音声アシスタント（Node.js）
 
-This application demonstrates how to use Node.js, [Twilio Voice](https://www.twilio.com/docs/voice) and [Media Streams](https://www.twilio.com/docs/voice/media-streams), and [OpenAI's Realtime API](https://platform.openai.com/docs/) to make a phone call to speak with an AI Assistant. 
+このアプリケーションは、Node.js、[Twilio Voice](https://www.twilio.com/docs/voice)と[Media Streams](https://www.twilio.com/docs/voice/media-streams)、[OpenAIのRealtime API](https://platform.openai.com/docs/)を使用して、AIアシスタントとの電話会話を可能にする方法を示しています。 
 
-The application opens websockets with the OpenAI Realtime API and Twilio, and sends voice audio from one to the other to enable a two-way conversation.
+このアプリケーションは、OpenAI Realtime APIとTwilioとの間でウェブソケットを開き、音声オーディオを一方からもう一方に送信して、二方向の会話を可能にします。
 
-See [here](https://www.twilio.com/en-us/voice-ai-assistant-openai-realtime-api-node) for a tutorial overview of the code.
+[ここ](https://www.twilio.com/en-us/voice-ai-assistant-openai-realtime-api-node)で、コードのチュートリアル概要を参照してください。
 
-This application uses the following Twilio products in conjuction with OpenAI's Realtime API:
-- Voice (and TwiML, Media Streams)
-- Phone Numbers
+このアプリケーションは、OpenAIのRealtime APIと共に以下のTwilio製品を使用しています：
+- Voice (およびTwiML, Media Streams)
+- 電話番号
 
-## Prerequisites
+## 必要条件
 
-To use the app, you will  need:
+このアプリを使用するには、以下が必要です：
 
-- **Node.js 18+** We used \`18.20.4\` for development; download from [here](https://nodejs.org/).
-- **A Twilio account.** You can sign up for a free trial [here](https://www.twilio.com/try-twilio).
-- **A Twilio number with _Voice_ capabilities.** [Here are instructions](https://help.twilio.com/articles/223135247-How-to-Search-for-and-Buy-a-Twilio-Phone-Number-from-Console) to purchase a phone number.
-- **An OpenAI account and an OpenAI API Key.** You can sign up [here](https://platform.openai.com/).
-  - **OpenAI Realtime API access.**
+- **Node.js 18+** 開発には`18.20.4`を使用しました。[ここ](https://nodejs.org/)からダウンロードできます。
+- **Twilioアカウント。** 無料トライアルに[ここ](https://www.twilio.com/try-twilio)から登録できます。
+- **Voice機能を持つTwilio番号。** [ここ](https://help.twilio.com/articles/223135247-How-to-Search-for-and-Buy-a-Twilio-Phone-Number-from-Console)に、電話番号を購入するための手順が記載されています。
+- **OpenAIアカウントとOpenAI APIキー。** [ここ](https://platform.openai.com/)から登録できます。
+  - **OpenAI Realtime APIへのアクセス。**
 
-## Local Setup
+## ローカルセットアップ
 
-There are 4 required steps to get the app up-and-running locally for development and testing:
-1. Run ngrok or another tunneling solution to expose your local server to the internet for testing. Download ngrok [here](https://ngrok.com/).
-2. Install the packages
-3. Twilio setup
-4. Update the .env file
+ローカルで開発とテストを行うためのアプリを起動するには、以下の4つの必須ステップがあります：
+1. ngrokや他のトンネリングソリューションを使用して、ローカルサーバーをインターネットに公開し、テストを行います。ngrokは[ここ](https://ngrok.com/)からダウンロードできます。
+2. パッケージをインストール
+3. Twilioの設定
+4. .envファイルを更新
 
-### Open an ngrok tunnel
-When developing & testing locally, you'll need to open a tunnel to forward requests to your local development server. These instructions use ngrok.
+### ngrokトンネルを開く
+ローカルで開発とテストを行う際には、ローカル開発サーバーへのリクエストをフォワードするためのトンネルを開く必要があります。これらの手順ではngrokを使用します。
 
-Open a Terminal and run:
+ターミナルを開いて、以下を実行します：
 ```
 ngrok http 5050
 ```
-Once the tunnel has been opened, copy the `Forwarding` URL. It will look something like: `https://[your-ngrok-subdomain].ngrok.app`. You will
-need this when configuring your Twilio number setup.
+トンネルが開いた後、`Forwarding` URLをコピーします。それは`https://[your-ngrok-subdomain].ngrok.app`のようになります。これは、Twilio番号の設定で必要になります。
 
-Note that the `ngrok` command above forwards to a development server running on port `5050`, which is the default port configured in this application. If
-you override the `PORT` defined in `index.js`, you will need to update the `ngrok` command accordingly.
+注意：上記の`ngrok`コマンドは、デフォルトでポート`5050`で動作する開発サーバーにフォワードします。このアプリケーションでは、`index.js`でポートが設定されています。`PORT`をオーバーライドする場合は、`ngrok`コマンドも更新する必要があります。
 
-Keep in mind that each time you run the `ngrok http` command, a new URL will be created, and you'll need to update it everywhere it is referenced below.
+各回`ngrok http`コマンドを実行すると、新しいURLが作成され、以下で参照されるすべての場所で更新する必要があります。
 
-### Install required packages
+### 必要なパッケージをインストール
 
-Open a Terminal and run:
+ターミナルを開いて、以下を実行します：
 ```
 npm install
 ```
 
-### Twilio setup
+### Twilioの設定
 
-#### Point a Phone Number to your ngrok URL
-In the [Twilio Console](https://console.twilio.com/), go to **Phone Numbers** > **Manage** > **Active Numbers** and click on the additional phone number you purchased for this app in the **Prerequisites**.
+#### ngrok URLを電話番号にポイント
+[Twilio Console](https://console.twilio.com/)で、**Phone Numbers** > **Manage** > **Active Numbers**に移動し、このアプリのために購入した電話番号をクリックします。
 
-In your Phone Number configuration settings, update the first **A call comes in** dropdown to **Webhook**, and paste your ngrok forwarding URL (referenced above), followed by `/incoming-call`. For example, `https://[your-ngrok-subdomain].ngrok.app/incoming-call`. Then, click **Save configuration**.
+電話番号の設定で、最初の**A call comes in**ドロップダウンを**Webhook**に変更し、ngrokのフォワードURL（上記で参照）を `/incoming-call`に続けて貼り付けます。例えば、`https://[your-ngrok-subdomain].ngrok.app/incoming-call`。その後、**Save configuration**をクリックします。
 
-### Update the .env file
+### .envファイルを更新
 
-Create a `/env` file, or copy the `.env.example` file to `.env`:
-
+`.env`ファイルを作成するか、`.env.example`ファイルを`.env`にコピーします：
 ```
 cp .env.example .env
 ```
 
-In the .env file, update the `OPENAI_API_KEY` to your OpenAI API key from the **Prerequisites**.
+`.env`ファイルで、`OPENAI_API_KEY`を**必要条件**で指定されたOpenAI APIキーに更新します。
 
-## Run the app
-Once ngrok is running, dependencies are installed, Twilio is configured properly, and the `.env` is set up, run the dev server with the following command:
+## アプリを実行
+ngrokが動作し、依存関係がインストールされ、Twilioが適切に設定され、`.env`が設定された後、以下のコマンドで開発サーバーを実行します：
 ```
 node index.js
 ```
-## Test the app
-With the development server running, call the phone number you purchased in the **Prerequisites**. After the introduction, you should be able to talk to the AI Assistant. Have fun!
+## アプリをテスト
+開発サーバーが動作している間に、**必要条件**で購入した電話番号に電話をかけてください。紹介後、AIアシスタントと話すことができます。楽しんでください！
