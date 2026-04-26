@@ -4,7 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "check": "node --check index.js",
+    "check:realtime": "node scripts/check-realtime.js",
+    "smoke:local": "node scripts/smoke-local.js",
+    "test": "npm run check"
   },
   "keywords": [],
   "author": "",

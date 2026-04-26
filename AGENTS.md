@@ -14,9 +14,11 @@ This is a small Node.js ESM application centered on `index.js`. It starts a Fast
 
 - `npm install`: install dependencies from `package-lock.json`.
 - `cp .env.example .env`: create local configuration, then set `OPENAI_API_KEY`.
-- `node index.js`: run the Fastify server on `PORT` or `5050`.
+- `npm run start`: run the Fastify server on `PORT` or `5050`.
+- `npm run check`: run a Node syntax check for `index.js`.
+- `npm run smoke:local`: verify `/`, `/healthz`, and `/incoming-call` against a running local server.
 - `ngrok http 5050`: expose the local server for Twilio webhook testing.
-- `npm test`: currently a placeholder that exits with an error; update it when tests are added.
+- `npm test`: currently runs the syntax check.
 
 ## Coding Style & Naming Conventions
 

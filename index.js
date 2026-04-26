@@ -1,17 +1,26 @@
 import Fastify from 'fastify';
-import Fastify from 'fastify';
 import WebSocket from 'ws';
-// import fs from 'fs';
 import dotenv from 'dotenv';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
-import fetch from 'node-fetch';
 
 // .envファイルから環境変数を読み込む
 dotenv.config();
 
 // 環境変数からOpenAI APIキーを取得
-const { OPENAI_API_KEY } = process.env;
+const {
+    OPENAI_API_KEY,
+    PORT = 5050,
+    REALTIME_MODEL = 'gpt-realtime',
+    TRANSCRIPTION_MODEL = 'gpt-4o-transcribe',
+    EXTRACTION_MODEL = 'gpt-4o-2024-08-06',
+    VOICE = 'alloy',
+    VAD_TYPE = 'server_vad',
+    VAD_THRESHOLD = '0.65',
+    VAD_PREFIX_PADDING_MS = '300',
+    VAD_SILENCE_DURATION_MS = '700',
+    LOG_TRANSCRIPTS = 'false'
+} = process.env;
 
 if (!OPENAI_API_KEY) {
     console.error('OpenAI APIキーが見つかりません。.envファイルに設定してください。');
@@ -26,8 +35,8 @@ fastify.register(fastifyWs);
 // 定数の設定
 const SYSTEM_MESSAGE = 'ここにシステムメッセージを書く';
 // 例：`あなたは居酒屋まほろばー の AI 受付係です。あなたの仕事は、飲食店を利用したい顧客と丁寧に対話し、名前、電話番号、来店予定日を入手することです。一度で 1 つずつ質問してください。会話はフレンドリーでプロフェッショナルなままであることを確認し、ユーザーがこれらの詳細を自然に提供できるように誘導します。相手は日本人なので、日本語以外の返答が返ってきた時は、日本語の返答が返ってくるまで質問を繰り返してください。';
-const VOICE = 'alloy';//ここで話者の声を指定できるはず
-const PORT = process.env.PORT || 5050;
+const PORT_NUMBER = Number(PORT);
+const SHOULD_LOG_TRANSCRIPTS = LOG_TRANSCRIPTS === 'true';
 
 // セッション管理
 const sessions = new Map();
@@ -48,6 +57,10 @@ const LOG_EVENT_TYPES = [
 // ルート
 fastify.get('/', async (request, reply) => {
     reply.send({ message: 'Twilio Media Stream Server is running!' });
+});
+
+fastify.get('/healthz', async (request, reply) => {
+    reply.send({ status: 'ok' });
 });
 
 // Twilioが着信を処理するルート
@@ -77,10 +90,9 @@ fastify.register(async (fastify) => {
         let session = sessions.get(sessionId) || { transcript: '', streamSid: null };
         sessions.set(sessionId, session);
 
-        const openAiWs = new WebSocket('wss://api.openai.com/v1/realtime?model=gpt-4o-realtime-preview-2024-10-01', {
+        const openAiWs = new WebSocket(`wss://api.openai.com/v1/realtime?model=${encodeURIComponent(REALTIME_MODEL)}`, {
             headers: {
-                Authorization: `Bearer ${OPENAI_API_KEY}`,
-                "OpenAI-Beta": "realtime=v1"
+                Authorization: `Bearer ${OPENAI_API_KEY}`
             }
         });
 
@@ -91,7 +103,14 @@ fastify.register(async (fastify) => {
             const sessionUpdate = {
                 type: 'session.update',
                 session: {
-                    turn_detection: { type: 'server_vad' },
+                    turn_detection: {
+                        type: VAD_TYPE,
+                        threshold: Number(VAD_THRESHOLD),
+                        prefix_padding_ms: Number(VAD_PREFIX_PADDING_MS),
+                        silence_duration_ms: Number(VAD_SILENCE_DURATION_MS),
+                        create_response: true,
+                        interrupt_response: true
+                    },
                     input_audio_format: 'g711_ulaw',
                     output_audio_format: 'g711_ulaw',
                     voice: VOICE,
@@ -99,7 +118,7 @@ fastify.register(async (fastify) => {
                     modalities: ["text", "audio"],
                     temperature: 0.8,
                     input_audio_transcription: {
-                        "model": "whisper-1",//ここで音声認識のモデルを指定できるはず
+                        "model": TRANSCRIPTION_MODEL,//ここで音声認識のモデルを指定できるはず
                         //"language": "ja" //ここで言語を指定できるはず
                     }
                 }
@@ -142,14 +161,14 @@ fastify.register(async (fastify) => {
                 if (response.type === 'conversation.item.input_audio_transcription.completed') {
                     const userMessage = response.transcript.trim();
                     session.transcript += `User: ${userMessage}\n`;
-                    console.log(`User (${sessionId}): ${userMessage}`);
+                    if (SHOULD_LOG_TRANSCRIPTS) console.log(`User (${sessionId}): ${userMessage}`);
                 }
 
                 // エージェントの応答を処理
                 if (response.type === 'response.done') {
                     const agentMessage = response.response.output[0]?.content?.find(content => content.transcript)?.transcript || 'Agent message not found';
                     session.transcript += `Agent: ${agentMessage}\n`;
-                    console.log(`Agent (${sessionId}): ${agentMessage}`);
+                    if (SHOULD_LOG_TRANSCRIPTS) console.log(`Agent (${sessionId}): ${agentMessage}`);
                 }
 
                 if (response.type === 'session.updated') {
@@ -202,8 +221,10 @@ fastify.register(async (fastify) => {
         connection.on('close', async () => {
             if (openAiWs.readyState === WebSocket.OPEN) openAiWs.close();
             console.log(`Client disconnected (${sessionId}).`);
-            console.log('Full Transcript:');
-            console.log(session.transcript);
+            if (SHOULD_LOG_TRANSCRIPTS) {
+                console.log('Full Transcript:');
+                console.log(session.transcript);
+            }
 
             await processTranscriptAndSend(session.transcript, sessionId);
 
@@ -223,12 +244,12 @@ fastify.register(async (fastify) => {
 });
 
 // サーバーを起動
-fastify.listen({ port: PORT }, (err) => {
+fastify.listen({ port: PORT_NUMBER }, (err) => {
     if (err) {
         console.error(err);
         process.exit(1);
     }
-    console.log(`Server is listening on port ${PORT}`);
+    console.log(`Server is listening on port ${PORT_NUMBER}`);
 });
 
 // ChatGPT APIを使用してトランスクリプトから情報を抽出
@@ -242,7 +263,7 @@ async function makeChatGPTCompletion(transcript) {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "gpt-4o-2024-08-06",
+                model: EXTRACTION_MODEL,
                 messages: [
                     { "role": "system", "content": "ここにシステムメッセージを書く" },
                     //例：以下のトランスクリプトから顧客の名前、電話番号、来店予定日を抽出してください。
