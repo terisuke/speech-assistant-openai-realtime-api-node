@@ -27,7 +27,7 @@ gcloud run deploy speech-assistant-realtime \
   --cpu 1 \
   --memory 512Mi \
   --set-secrets OPENAI_API_KEY=openai-api-key:latest \
-  --set-env-vars REALTIME_MODEL=gpt-realtime-1.5,TRANSCRIPTION_MODEL=gpt-4o-transcribe,EXTRACTION_MODEL=gpt-5.4-mini,EXTRACTION_ENABLED=false,VOICE=marin,AUDIO_FORMAT=audio/pcmu,AUDIO_NOISE_REDUCTION=near_field,VAD_TYPE=server_vad,VAD_THRESHOLD=0.65,VAD_PREFIX_PADDING_MS=300,VAD_SILENCE_DURATION_MS=700,VAD_EAGERNESS=low,LOG_TRANSCRIPTS=false,LOG_OPENAI_RESPONSES=false
+  --set-env-vars REALTIME_MODEL=gpt-realtime-1.5,TRANSCRIPTION_MODEL=gpt-4o-transcribe,EXTRACTION_MODEL=gpt-5.4-mini,EXTRACTION_ENABLED=true,VOICE=marin,AUDIO_FORMAT=audio/pcmu,AUDIO_NOISE_REDUCTION=near_field,VAD_TYPE=server_vad,VAD_THRESHOLD=0.65,VAD_PREFIX_PADDING_MS=300,VAD_SILENCE_DURATION_MS=700,VAD_EAGERNESS=low,LOG_TRANSCRIPTS=true,LOG_OPENAI_RESPONSES=false,GOOGLE_CLOUD_PROJECT=aipartner-426616,CALL_LOG_FIRESTORE_ENABLED=true,CALL_LOG_FIRESTORE_DATABASE_ID=speech-assistant-logs,CALL_LOG_FIRESTORE_COLLECTION=callLogs,CALL_LOG_SHEETS_ENABLED=true,GOOGLE_SHEETS_SPREADSHEET_ID=11klH3hxWcIWKLOVTBJGxPjATG5aai0a6D8z_F6yUO1A
 ```
 
 ## CI/CD
@@ -54,6 +54,12 @@ https://<cloud-run-url>/incoming-call
 ```
 
 本番の050番号恒久切替は、Cloud Run上で `/health`、`/incoming-call`、実通話、ログ、署名検証を確認してから行います。
+
+## 通話ログ
+
+通話ログは既存Firebaseのdefault databaseではなく、専用Firestore named database `speech-assistant-logs` の `callLogs` に保存します。Google Sheets `11klH3hxWcIWKLOVTBJGxPjATG5aai0a6D8z_F6yUO1A` は運用ビューとして通話終了時に1行追記します。
+
+Cloud Run実行サービスアカウント `639959525777-compute@developer.gserviceaccount.com` を、対象スプレッドシートの編集者として共有してください。
 
 ## 注意点
 
