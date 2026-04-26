@@ -13,7 +13,8 @@ const {
     PORT = 5050,
     REALTIME_MODEL = 'gpt-realtime-1.5',
     TRANSCRIPTION_MODEL = 'gpt-4o-transcribe',
-    EXTRACTION_MODEL = 'gpt-4o-2024-08-06',
+    EXTRACTION_MODEL = 'gpt-5.4-mini',
+    EXTRACTION_ENABLED = 'false',
     VOICE = 'marin',
     AUDIO_FORMAT = 'audio/pcmu',
     AUDIO_NOISE_REDUCTION = 'near_field',
@@ -22,7 +23,8 @@ const {
     VAD_PREFIX_PADDING_MS = '300',
     VAD_SILENCE_DURATION_MS = '700',
     VAD_EAGERNESS = 'low',
-    LOG_TRANSCRIPTS = 'false'
+    LOG_TRANSCRIPTS = 'false',
+    LOG_OPENAI_RESPONSES = 'false'
 } = process.env;
 
 if (!OPENAI_API_KEY) {
@@ -40,6 +42,8 @@ const SYSTEM_MESSAGE = 'ここにシステムメッセージを書く';
 // 例：`あなたは居酒屋まほろばー の AI 受付係です。あなたの仕事は、飲食店を利用したい顧客と丁寧に対話し、名前、電話番号、来店予定日を入手することです。一度で 1 つずつ質問してください。会話はフレンドリーでプロフェッショナルなままであることを確認し、ユーザーがこれらの詳細を自然に提供できるように誘導します。相手は日本人なので、日本語以外の返答が返ってきた時は、日本語の返答が返ってくるまで質問を繰り返してください。';
 const PORT_NUMBER = Number(PORT);
 const SHOULD_LOG_TRANSCRIPTS = LOG_TRANSCRIPTS === 'true';
+const SHOULD_RUN_EXTRACTION = EXTRACTION_ENABLED === 'true';
+const SHOULD_LOG_OPENAI_RESPONSES = LOG_OPENAI_RESPONSES === 'true';
 const buildTurnDetectionConfig = () => {
     if (VAD_TYPE === 'semantic_vad') {
         return {
@@ -95,7 +99,6 @@ const LOG_EVENT_TYPES = [
     'session.updated',
     'response.output_text.done',
     'response.output_audio_transcript.done',
-    'response.output_audio.delta',
     'conversation.item.input_audio_transcription.completed'
 ];
 
@@ -325,7 +328,9 @@ async function makeChatGPTCompletion(transcript) {
 
         console.log('ChatGPT API response status:', response.status);
         const data = await response.json();
-        console.log('Full ChatGPT API response:', JSON.stringify(data, null, 2));
+        if (SHOULD_LOG_OPENAI_RESPONSES) {
+            console.log('Full ChatGPT API response:', JSON.stringify(data, null, 2));
+        }
         return data;
     } catch (error) {
         console.error('Error making ChatGPT completion call:', error);
@@ -336,11 +341,23 @@ async function makeChatGPTCompletion(transcript) {
 // トランスクリプトを処理して結果をログに出力
 async function processTranscriptAndSend(transcript, sessionId = null) {
     console.log(`Starting transcript processing for session ${sessionId}...`);
+    if (!SHOULD_RUN_EXTRACTION) {
+        console.log('Transcript extraction is disabled. Set EXTRACTION_ENABLED=true to enable it.');
+        return;
+    }
+
+    if (!transcript.trim()) {
+        console.log('Transcript is empty. Skipping extraction.');
+        return;
+    }
+
     try {
         // ChatGPT APIを呼び出す
         const result = await makeChatGPTCompletion(transcript);
 
-        console.log('Raw result from ChatGPT:', JSON.stringify(result, null, 2));
+        if (SHOULD_LOG_OPENAI_RESPONSES) {
+            console.log('Raw result from ChatGPT:', JSON.stringify(result, null, 2));
+        }
 
         if (result.choices && result.choices[0] && result.choices[0].message && result.choices[0].message.content) {
             try {
