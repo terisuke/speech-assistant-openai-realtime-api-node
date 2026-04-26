@@ -12,10 +12,18 @@
 
 対象Issue: #19
 
+実装済み:
+
 - Twilio webhook署名検証を `/incoming-call` に追加する。
-- 不正なTwilio以外のリクエストを拒否する。
-- 通話ログのPII項目、保持期間、閲覧権限を定義する。
-- Cloud Runログに個人情報を出しすぎないよう、ログレベルを整理する。
+- 不正なTwilio以外のリクエストを403で拒否する。
+- Cloud Runログの全文トランスクリプト、Realtimeイベント本文、OpenAI応答本文を本番デフォルトで無効化する。
+- `actor`、`action`、`target`、`timestamp` を含む監査ログをJSONで出力する。
+
+残作業:
+
+- 通話ログの保持期間を正式決定する。
+- Firestore/Sheetsの閲覧権限を運用ロールへ分ける。
+- BigQuery分析用の保持期間とマスキング方針を決める。
 
 完了条件:
 
