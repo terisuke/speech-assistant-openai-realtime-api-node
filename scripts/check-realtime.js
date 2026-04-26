@@ -5,8 +5,17 @@ dotenv.config();
 
 const {
     OPENAI_API_KEY,
-    REALTIME_MODEL = 'gpt-realtime',
-    REALTIME_CHECK_TIMEOUT_MS = '10000'
+    REALTIME_MODEL = 'gpt-realtime-1.5',
+    REALTIME_CHECK_TIMEOUT_MS = '10000',
+    TRANSCRIPTION_MODEL = 'gpt-4o-transcribe',
+    VOICE = 'marin',
+    AUDIO_FORMAT = 'audio/pcmu',
+    AUDIO_NOISE_REDUCTION = 'near_field',
+    VAD_TYPE = 'server_vad',
+    VAD_THRESHOLD = '0.65',
+    VAD_PREFIX_PADDING_MS = '300',
+    VAD_SILENCE_DURATION_MS = '700',
+    VAD_EAGERNESS = 'low'
 } = process.env;
 
 if (!OPENAI_API_KEY) {
@@ -17,6 +26,46 @@ if (!OPENAI_API_KEY) {
 const timeoutMs = Number(REALTIME_CHECK_TIMEOUT_MS);
 const url = `wss://api.openai.com/v1/realtime?model=${encodeURIComponent(REALTIME_MODEL)}`;
 const redactSecrets = (message) => message.replace(/sk-[^\s.]+/g, 'sk-***');
+const buildTurnDetectionConfig = () => {
+    if (VAD_TYPE === 'semantic_vad') {
+        return {
+            type: VAD_TYPE,
+            eagerness: VAD_EAGERNESS,
+            create_response: true,
+            interrupt_response: true
+        };
+    }
+
+    return {
+        type: VAD_TYPE,
+        threshold: Number(VAD_THRESHOLD),
+        prefix_padding_ms: Number(VAD_PREFIX_PADDING_MS),
+        silence_duration_ms: Number(VAD_SILENCE_DURATION_MS),
+        create_response: true,
+        interrupt_response: true
+    };
+};
+
+const sessionUpdate = {
+    type: 'session.update',
+    session: {
+        type: 'realtime',
+        model: REALTIME_MODEL,
+        instructions: 'Realtime connectivity check. Keep responses brief.',
+        audio: {
+            input: {
+                format: { type: AUDIO_FORMAT },
+                noise_reduction: AUDIO_NOISE_REDUCTION === 'null' ? null : { type: AUDIO_NOISE_REDUCTION },
+                transcription: { model: TRANSCRIPTION_MODEL },
+                turn_detection: buildTurnDetectionConfig()
+            },
+            output: {
+                format: { type: AUDIO_FORMAT },
+                voice: VOICE
+            }
+        }
+    }
+};
 
 const ws = new WebSocket(url, {
     headers: {
@@ -32,12 +81,17 @@ const timeout = setTimeout(() => {
 
 ws.on('open', () => {
     console.log(`ok - connected to OpenAI Realtime model ${REALTIME_MODEL}`);
+    ws.send(JSON.stringify(sessionUpdate));
 });
 
 ws.on('message', (data) => {
     const event = JSON.parse(data);
     if (event.type === 'session.created') {
         console.log('ok - received session.created');
+    }
+
+    if (event.type === 'session.updated') {
+        console.log('ok - session.update accepted');
         clearTimeout(timeout);
         ws.close();
     }

@@ -11,14 +11,17 @@ dotenv.config();
 const {
     OPENAI_API_KEY,
     PORT = 5050,
-    REALTIME_MODEL = 'gpt-realtime',
+    REALTIME_MODEL = 'gpt-realtime-1.5',
     TRANSCRIPTION_MODEL = 'gpt-4o-transcribe',
     EXTRACTION_MODEL = 'gpt-4o-2024-08-06',
-    VOICE = 'alloy',
+    VOICE = 'marin',
+    AUDIO_FORMAT = 'audio/pcmu',
+    AUDIO_NOISE_REDUCTION = 'near_field',
     VAD_TYPE = 'server_vad',
     VAD_THRESHOLD = '0.65',
     VAD_PREFIX_PADDING_MS = '300',
     VAD_SILENCE_DURATION_MS = '700',
+    VAD_EAGERNESS = 'low',
     LOG_TRANSCRIPTS = 'false'
 } = process.env;
 
@@ -37,6 +40,45 @@ const SYSTEM_MESSAGE = 'ここにシステムメッセージを書く';
 // 例：`あなたは居酒屋まほろばー の AI 受付係です。あなたの仕事は、飲食店を利用したい顧客と丁寧に対話し、名前、電話番号、来店予定日を入手することです。一度で 1 つずつ質問してください。会話はフレンドリーでプロフェッショナルなままであることを確認し、ユーザーがこれらの詳細を自然に提供できるように誘導します。相手は日本人なので、日本語以外の返答が返ってきた時は、日本語の返答が返ってくるまで質問を繰り返してください。';
 const PORT_NUMBER = Number(PORT);
 const SHOULD_LOG_TRANSCRIPTS = LOG_TRANSCRIPTS === 'true';
+const buildTurnDetectionConfig = () => {
+    if (VAD_TYPE === 'semantic_vad') {
+        return {
+            type: VAD_TYPE,
+            eagerness: VAD_EAGERNESS,
+            create_response: true,
+            interrupt_response: true
+        };
+    }
+
+    return {
+        type: VAD_TYPE,
+        threshold: Number(VAD_THRESHOLD),
+        prefix_padding_ms: Number(VAD_PREFIX_PADDING_MS),
+        silence_duration_ms: Number(VAD_SILENCE_DURATION_MS),
+        create_response: true,
+        interrupt_response: true
+    };
+};
+
+const buildRealtimeSessionConfig = () => ({
+    type: 'realtime',
+    model: REALTIME_MODEL,
+    instructions: SYSTEM_MESSAGE,
+    audio: {
+        input: {
+            format: { type: AUDIO_FORMAT },
+            noise_reduction: AUDIO_NOISE_REDUCTION === 'null' ? null : { type: AUDIO_NOISE_REDUCTION },
+            transcription: {
+                model: TRANSCRIPTION_MODEL
+            },
+            turn_detection: buildTurnDetectionConfig()
+        },
+        output: {
+            format: { type: AUDIO_FORMAT },
+            voice: VOICE
+        }
+    }
+});
 
 // セッション管理
 const sessions = new Map();
@@ -50,7 +92,10 @@ const LOG_EVENT_TYPES = [
     'input_audio_buffer.speech_stopped',
     'input_audio_buffer.speech_started',
     'session.created',
-    'response.text.done',
+    'session.updated',
+    'response.output_text.done',
+    'response.output_audio_transcript.done',
+    'response.output_audio.delta',
     'conversation.item.input_audio_transcription.completed'
 ];
 
@@ -102,26 +147,7 @@ fastify.register(async (fastify) => {
         const sendSessionUpdate = () => {
             const sessionUpdate = {
                 type: 'session.update',
-                session: {
-                    turn_detection: {
-                        type: VAD_TYPE,
-                        threshold: Number(VAD_THRESHOLD),
-                        prefix_padding_ms: Number(VAD_PREFIX_PADDING_MS),
-                        silence_duration_ms: Number(VAD_SILENCE_DURATION_MS),
-                        create_response: true,
-                        interrupt_response: true
-                    },
-                    input_audio_format: 'g711_ulaw',
-                    output_audio_format: 'g711_ulaw',
-                    voice: VOICE,
-                    instructions: SYSTEM_MESSAGE,
-                    modalities: ["text", "audio"],
-                    temperature: 0.8,
-                    input_audio_transcription: {
-                        "model": TRANSCRIPTION_MODEL,//ここで音声認識のモデルを指定できるはず
-                        //"language": "ja" //ここで言語を指定できるはず
-                    }
-                }
+                session: buildRealtimeSessionConfig()
             };
 
             console.log('Sending session update:', JSON.stringify(sessionUpdate));
@@ -166,7 +192,16 @@ fastify.register(async (fastify) => {
 
                 // エージェントの応答を処理
                 if (response.type === 'response.done') {
-                    const agentMessage = response.response.output[0]?.content?.find(content => content.transcript)?.transcript || 'Agent message not found';
+                    const output = response.response.output || [];
+                    const agentMessage = output
+                        .flatMap(item => item.content || [])
+                        .find(content => content.transcript || content.text)?.transcript || 'Agent message not found';
+                    session.transcript += `Agent: ${agentMessage}\n`;
+                    if (SHOULD_LOG_TRANSCRIPTS) console.log(`Agent (${sessionId}): ${agentMessage}`);
+                }
+
+                if (response.type === 'response.output_audio_transcript.done') {
+                    const agentMessage = response.transcript || 'Agent message not found';
                     session.transcript += `Agent: ${agentMessage}\n`;
                     if (SHOULD_LOG_TRANSCRIPTS) console.log(`Agent (${sessionId}): ${agentMessage}`);
                 }
@@ -175,7 +210,7 @@ fastify.register(async (fastify) => {
                     console.log('Session updated successfully:', response);
                 }
 
-                if (response.type === 'response.audio.delta' && response.delta) {
+                if ((response.type === 'response.output_audio.delta' || response.type === 'response.audio.delta') && response.delta) {
                     const audioDelta = {
                         event: 'media',
                         streamSid: session.streamSid,
