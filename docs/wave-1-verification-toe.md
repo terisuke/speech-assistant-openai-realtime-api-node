@@ -1,68 +1,74 @@
-# Wave 1 Verification ToE
+# Wave 1 検証ToE
 
-ToE means test evidence for the Wave 1 local voice loop. Use this document to reproduce and record the minimum proof that the current Twilio -> local Node -> OpenAI Realtime -> Twilio path works before Cloud Run or permanent `050` number cutover.
+ToEはTest of Evidence、つまり検証証跡です。この文書は、Cloud Runや050番号の恒久切替に進む前に、Twilio -> ローカルNode -> OpenAI Realtime -> Twilio の音声ループが成立することを再現・記録するための手順です。
 
-## Scope
+## 対象
 
-This verifies:
+検証するもの:
 
-- Local server startup.
-- Local HTTP and TwiML endpoints.
-- OpenAI Realtime GA WebSocket session creation and `session.update`.
-- Twilio Media Streams-compatible WebSocket audio return path.
-- Temporary real `050` inbound call through ngrok.
+- ローカルサーバー起動
+- ローカルHTTP/TwiMLエンドポイント
+- OpenAI Realtime GA WebSocket接続と `session.update`
+- Twilio Media Streams互換のWebSocket音声返送
+- ngrok経由の050実着信
 
-This does not verify Cloud Run, React operator UI, RAG, human handoff, or production webhook signature validation.
+対象外:
 
-## Prerequisites
+- Cloud Run
+- React管理画面
+- RAG/ナレッジ
+- 人間への引き継ぎ
+- 本番のTwilio webhook署名検証
 
-- Node.js 22 or compatible Node runtime.
-- Valid `.env` with `OPENAI_API_KEY`.
-- Twilio CLI logged in and active.
-- ngrok configured.
-- Access to the Twilio `050` number.
+## 前提
 
-Confirm Twilio profile and numbers:
+- Node.js 22系
+- `OPENAI_API_KEY` を含む `.env`
+- Twilio CLIログイン済み
+- ngrok設定済み
+- Twilioの050番号へアクセスできること
+
+Twilio profileと番号を確認します。
 
 ```bash
 twilio profiles:list
 twilio api:core:incoming-phone-numbers:list --properties sid,phoneNumber,friendlyName,voiceUrl,voiceMethod --limit 20
 ```
 
-Known Wave 1 test number:
+Wave 1で確認した050番号:
 
 ```text
 +815017929351
 ```
 
-## Local Checks
+## ローカル確認
 
-Install and run syntax checks:
+依存関係を入れて構文チェックを実行します。
 
 ```bash
 npm ci
 npm test
 ```
 
-Expected:
+期待結果:
 
 ```text
 node --check index.js
 ```
 
-Start the local server:
+サーバーを起動します。
 
 ```bash
 npm run start
 ```
 
-In a second terminal, verify local endpoints:
+別ターミナルでローカルエンドポイントを確認します。
 
 ```bash
 SMOKE_BASE_URL=http://127.0.0.1:5050 npm run smoke:local
 ```
 
-Expected:
+期待結果:
 
 ```text
 ok - root endpoint
@@ -70,13 +76,13 @@ ok - health endpoint
 ok - incoming-call TwiML
 ```
 
-## OpenAI Realtime Check
+## OpenAI Realtime確認
 
 ```bash
 npm run check:realtime
 ```
 
-Expected:
+期待結果:
 
 ```text
 ok - connected to OpenAI Realtime model gpt-realtime-1.5
@@ -84,64 +90,64 @@ ok - received session.created
 ok - session.update accepted
 ```
 
-## Local Media Stream Check
+## Media Streams互換確認
 
-With the local server still running:
+ローカルサーバー起動中に実行します。
 
 ```bash
 npm run smoke:media-stream
 ```
 
-Expected:
+期待結果:
 
 ```text
 ok - connected to local media stream WebSocket
 ok - received outbound media payload from server
 ```
 
-This confirms that a Twilio Media Streams-compatible client can connect and receive an outbound audio payload generated through OpenAI Realtime.
+これは、Twilio Media Streams互換クライアントが接続し、OpenAI Realtimeで生成された音声payloadを受け取れることを確認します。
 
-## ngrok Public Endpoint Check
+## ngrok公開URL確認
 
-Start ngrok:
+ngrokを起動します。
 
 ```bash
 ngrok http 5050
 ```
 
-Fetch the public URL:
+公開URLを取得します。
 
 ```bash
 curl -s http://127.0.0.1:4040/api/tunnels
 ```
 
-Set:
+環境変数へ入れます。
 
 ```bash
 export NGROK_URL=https://your-ngrok-host.ngrok-free.app
 ```
 
-Verify public endpoints:
+公開URLを確認します。
 
 ```bash
 curl -sS -i "$NGROK_URL/healthz"
 curl -sS -i -X POST "$NGROK_URL/incoming-call"
 ```
 
-Expected:
+期待結果:
 
-- `/healthz` returns HTTP 200 and `{"status":"ok"}`.
-- `/incoming-call` returns TwiML with `wss://.../media-stream`.
+- `/healthz` がHTTP 200と `{"status":"ok"}` を返す。
+- `/incoming-call` が `wss://.../media-stream` を含むTwiMLを返す。
 
-## Temporary `050` Call Test
+## 050一時着信テスト
 
-Record the current webhook before changing it:
+変更前のWebhookを必ず記録します。
 
 ```bash
 twilio api:core:incoming-phone-numbers:list --properties sid,phoneNumber,voiceUrl,voiceMethod --limit 20
 ```
 
-Temporarily point the `050` number to ngrok:
+050番号を一時的にngrokへ向けます。
 
 ```bash
 twilio api:core:incoming-phone-numbers:update \
@@ -151,9 +157,9 @@ twilio api:core:incoming-phone-numbers:update \
   --properties sid,phoneNumber,voiceUrl,voiceMethod
 ```
 
-Call `050-1792-9351`.
+`050-1792-9351` へ電話します。
 
-Expected server logs:
+期待ログ:
 
 ```text
 Incoming call
@@ -169,16 +175,16 @@ Received event: response.output_audio_transcript.done
 Received event: response.done
 ```
 
-Evidence from the first successful run:
+初回成功時の証跡:
 
 ```text
 transcript: こんにちは
 transcript: どんなことがあなたできるんですか?
 ```
 
-## Cleanup
+## 後片付け
 
-Restore the previous webhook. During the first Wave 1 run, the restore target was:
+必ずWebhookを戻します。初回Wave 1検証時の戻し先は次の通りです。
 
 ```bash
 twilio api:core:incoming-phone-numbers:update \
@@ -188,27 +194,27 @@ twilio api:core:incoming-phone-numbers:update \
   --properties sid,phoneNumber,voiceUrl,voiceMethod
 ```
 
-Stop local processes:
+ローカルプロセスを停止します。
 
 ```bash
 pkill -f "node index.js"
 pkill -f "ngrok http 5050"
 ```
 
-Confirm the number has been restored:
+番号設定が戻っていることを確認します。
 
 ```bash
 twilio api:core:incoming-phone-numbers:list --properties sid,phoneNumber,voiceUrl,voiceMethod --limit 20
 ```
 
-## Pass Criteria
+## 合格基準
 
-Wave 1 passes when:
+Wave 1は次を満たしたら合格です。
 
-- CI `Node checks` passes.
-- `npm test` passes locally.
-- `npm run check:realtime` passes.
-- `npm run smoke:local` passes.
-- `npm run smoke:media-stream` passes.
-- A real `050` inbound call reaches OpenAI Realtime and receives audio back.
-- The temporary Twilio webhook is restored after testing.
+- CIの `Node checks` が成功する。
+- ローカルで `npm test` が成功する。
+- `npm run check:realtime` が成功する。
+- `npm run smoke:local` が成功する。
+- `npm run smoke:media-stream` が成功する。
+- 050実着信でOpenAI Realtimeへ接続し、AI音声応答が返る。
+- テスト後にTwilio webhookを元に戻している。

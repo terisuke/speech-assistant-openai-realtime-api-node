@@ -1,22 +1,22 @@
-# ADR 0002: Operator Console and Human Handoff
+# ADR 0002: オペレーターコンソールと人間への引き継ぎ
 
-- Status: Proposed
-- Date: 2026-04-26
-- Scope: React console, live monitoring, AI escalation, operator WebRTC, Twilio Conference control
+- ステータス: 提案中
+- 日付: 2026-04-26
+- 対象: React管理画面、通話監視、AIパスアップ、オペレーターWebRTC、Twilio Conference制御
 
-## Context
+## 背景
 
-The desired operating model is not a fully autonomous voice bot. Operators should be able to watch AI-handled customer calls, see the transcript and AI state, and join the call when the AI requests help or the operator decides to intervene.
+このシステムは完全自律の音声ボットではなく、日本のコールセンターでAIと人間が協調する前提です。AIが対応し、必要に応じて人間オペレーターへパスアップし、オペレーターが同じ画面から顧客通話へ参加できる必要があります。
 
-The current code has no frontend, no live event API, no operator identity, and no call-control model. Adding React alone solves only the display/configuration problem. Human voice takeover requires browser audio and telephony call control.
+現行コードにはフロントエンド、リアルタイム通話イベント、オペレーターID、通話制御がありません。Reactだけでは通話参加は実現できないため、Twilio Voice SDKとConference制御が必要です。
 
-## Decision
+## 決定
 
-Build the operator experience as a React + TypeScript console backed by a Fastify API. Use Twilio Voice JavaScript SDK for the operator softphone and Twilio Conference for multi-party call management.
+React + TypeScriptでオペレーターコンソールを作り、Fastify backendが設定、ログ、Twilio token、Conference制御を提供します。オペレーターの音声参加にはTwilio Voice JavaScript SDKを使います。
 
-The AI remains connected through the backend using Twilio Media Streams and OpenAI Realtime WebSocket. The operator joins through Twilio Voice SDK, which uses WebRTC between the browser and Twilio. Backend APIs control conference participants.
+AIは従来通りbackendからTwilio Media StreamsとOpenAI Realtime WebSocketへ接続します。オペレーターはブラウザからTwilioへWebRTC接続し、backendがConference参加者を制御します。
 
-## Handoff States
+## 引き継ぎ状態
 
 ```text
 ai_active
@@ -28,42 +28,41 @@ ai_active
   -> call_completed
 ```
 
-Manual operator intervention can move directly from `ai_active` to `operator_ringing`.
+オペレーターが手動で介入する場合は、`ai_active` から `operator_ringing` へ直接遷移できます。
 
-## Console Capabilities
+## コンソール機能
 
-- Live call list with status, elapsed time, customer number, AI state, and escalation status.
-- Transcript panel with user/AI turns and timing.
-- VAD/realtime event panel for debugging speech start/stop, response creation, and interruptions.
-- Assistant settings: instructions, first message, voice, model, transcription model, VAD profile.
-- Knowledge/RAG management: upload, indexing status, active/inactive state, and source preview.
-- Handoff controls: acknowledge escalation, join call, mute AI, remove AI, end operator leg, end call.
+- 通話一覧: 状態、経過時間、顧客番号、AI状態、パスアップ状態
+- 通話詳細: ユーザー/AI発話、文字起こし、タイムライン
+- デバッグ: VAD、Realtimeイベント、割り込み、応答生成
+- 設定: instructions、初回発話、voice、model、transcription、VAD profile
+- ナレッジ: アップロード、インデックス状態、有効/無効、参照元確認
+- 引き継ぎ: パスアップ確認、通話参加、AIミュート、AI退出、オペレーター切断、通話終了
 
-## Backend Capabilities
+## backend機能
 
-- REST APIs for settings, knowledge, session records, and Twilio access-token generation.
-- Live event stream over WebSocket or SSE for call state and transcript updates.
-- Twilio webhook signature verification.
-- Twilio Conference participant APIs for join/mute/hold/remove operations.
-- Audit log for settings changes and handoff actions.
+- 設定、ナレッジ、通話記録、Twilio access tokenのREST API
+- 通話状態と文字起こしのWebSocket/SSE配信
+- Twilio webhook署名検証
+- Conference参加者の追加、ミュート、保留、削除
+- 設定変更と引き継ぎ操作の監査ログ
 
-## Security and Privacy
+## セキュリティと個人情報
 
-- The console must require authentication before exposing call logs or softphone tokens.
-- Twilio Voice access tokens must be short-lived and scoped to an operator identity.
-- Full transcripts and phone numbers should not be printed in production logs by default.
-- Knowledge uploads need validation, size limits, and deletion/disable controls.
+- 管理画面は認証必須にする。
+- Twilio Voice tokenは短命かつオペレーターIDに紐づける。
+- 本番ログで全文トランスクリプトや電話番号をデフォルト出力しない。
+- ナレッジ文書にはサイズ制限、検証、削除、無効化を用意する。
 
-## Open Questions
+## 未決事項
 
-- Which identity provider should protect the admin console for the first release?
-- Should AI remain silently listening after operator takeover, or be removed from the conference?
-- Is coaching mode required, where a supervisor/AI can speak to the operator without the customer hearing it?
-- What persistence layer should store settings, knowledge metadata, transcripts, and audit logs?
+- 初期リリースの認証基盤を何にするか。
+- 人間引き継ぎ後にAIを退出させるか、無音で聞かせ続けるか。
+- 顧客には聞こえないコーチングモードを必要とするか。
+- 設定、ナレッジ、通話履歴、監査ログの永続化先を何にするか。
 
-## References
+## 参考
 
 - Twilio Voice JavaScript SDK: https://www.twilio.com/docs/voice/client/javascript
 - Twilio Voice SDK reference components: https://www.twilio.com/docs/voice/sdks/javascript/reference-components
 - Twilio Voice Conference: https://www.twilio.com/docs/voice/conference
-- OpenAI Realtime WebRTC: https://platform.openai.com/docs/guides/realtime-webrtc

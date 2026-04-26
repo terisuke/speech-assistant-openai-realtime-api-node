@@ -1,5 +1,5 @@
-# ADR 0001: 2026 Modernization Plan
+# ADR 0001: 2026年版モダナイゼーション計画
 
-This ADR has moved to [0001-2026-production-modernization.md](./0001-2026-production-modernization.md).
+このADRは [0001-2026-production-modernization.md](./0001-2026-production-modernization.md) に移動しました。
 
-The original plan was expanded to include React operator monitoring, Twilio Voice SDK browser WebRTC, and Conference-based human handoff.
+当初の計画は、Reactによるオペレーター監視、Twilio Voice SDKによるブラウザWebRTC、Twilio Conferenceを使った人間への引き継ぎまで含む形に拡張されています。

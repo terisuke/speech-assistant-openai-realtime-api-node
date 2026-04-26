@@ -1,41 +1,43 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
+## プロジェクト構成
 
-This is a small Node.js ESM application centered on `index.js`. It starts a Fastify server, handles Twilio Voice webhooks, bridges Twilio Media Streams to the OpenAI Realtime API, and processes transcripts after disconnect.
+このリポジトリは、Twilio Voice / Media Streams と OpenAI Realtime API をつなぐ日本向け音声AI受付システムです。現時点の本体は `index.js` です。
 
-- `index.js`: main server, WebSocket bridge, session tracking, transcript extraction.
-- `Readme.md`: setup and local testing instructions, currently written in Japanese.
-- `.env.example`: required environment variable template.
-- `package.json` / `package-lock.json`: npm metadata and locked dependency versions.
-- No dedicated `src/`, `test/`, or asset directories exist yet.
+- `index.js`: Fastifyサーバー、Twilio webhook、Media Streams WebSocket、OpenAI Realtime接続
+- `scripts/`: ローカル検証用スクリプト
+- `docs/`: ADR、実装計画、検証手順
+- `.env.example`: 環境変数のテンプレート
+- `.github/workflows/ci.yml`: 最小CI
 
-## Build, Test, and Development Commands
+## 開発コマンド
 
-- `npm install`: install dependencies from `package-lock.json`.
-- `cp .env.example .env`: create local configuration, then set `OPENAI_API_KEY`.
-- `npm run start`: run the Fastify server on `PORT` or `5050`.
-- `npm run check`: run a Node syntax check for `index.js`.
-- `npm run smoke:local`: verify `/`, `/healthz`, and `/incoming-call` against a running local server.
-- `ngrok http 5050`: expose the local server for Twilio webhook testing.
-- `npm test`: currently runs the syntax check.
+- `npm ci`: lockfileに基づいて依存関係をインストールします。
+- `npm run start`: ローカルサーバーを起動します。
+- `npm run check`: `index.js` の構文チェックを実行します。
+- `npm test`: 現時点では `npm run check` を実行します。
+- `npm run check:realtime`: OpenAI Realtimeへ接続し、GA形式の `session.update` を検証します。
+- `npm run smoke:local`: `/`, `/healthz`, `/incoming-call` を検証します。
+- `npm run smoke:media-stream`: Twilio Media Streams互換のWebSocket検証を行います。
 
-## Coding Style & Naming Conventions
+## コーディング規約
 
-Use modern JavaScript ESM syntax because `package.json` sets `"type": "module"`. Keep indentation at 4 spaces to match `index.js`. Prefer `const` for stable bindings and `let` only for reassigned state. Use camelCase for variables and functions, and uppercase names for constants such as `SYSTEM_MESSAGE`, `VOICE`, and `PORT`.
+JavaScriptはESMで書きます。インデントは既存コードに合わせて4スペースを使います。設定値、モデル名、VAD値、音声設定はコード直書きではなく環境変数へ寄せてください。
 
-No formatter or linter is configured. Before adding broad style changes, introduce tooling deliberately in a separate change.
+## テスト方針
 
-## Testing Guidelines
+最低限、変更前後で `npm test` を通してください。RealtimeやTwilio経路を触る場合は、`check:realtime`、`smoke:local`、`smoke:media-stream` の結果もPR本文へ記録します。
 
-There is no test framework configured. For new behavior, add focused tests under `test/` with Node's built-in test runner or another explicitly configured framework. Name tests by behavior, for example `test/media-stream-session.test.js`. At minimum, manually verify startup with `node index.js`, the root health response, and a Twilio call through ngrok when touching WebSocket or TwiML behavior.
+## ブランチ運用
 
-## Commit & Pull Request Guidelines
+- `main`: 本番安定版
+- `develop`: 開発統合先
+- `feature/*`: 新機能
+- `fix/*`: 修正
+- `docs/*`: ドキュメント変更
 
-The existing history uses short informal messages (`first commit`, `for trial`), so there is no strict convention. Use concise imperative commit messages going forward, for example `Add transcript extraction validation`.
+`main` と `develop` は保護されています。PR経由で変更してください。
 
-Pull requests should describe behavior changes, list manual test steps, mention required environment variables, and include logs or screenshots when changing call setup, ngrok/Twilio configuration, or API responses.
+## セキュリティ
 
-## Security & Configuration Tips
-
-Never commit `.env` or real API keys. Keep `.env.example` limited to placeholder values. Avoid logging sensitive customer details beyond what is necessary for local debugging, especially transcripts, names, phone numbers, and visit dates.
+`.env`、APIキー、Twilio Auth Token、通話録音、全文トランスクリプト、電話番号をコミットしないでください。本番ログでは個人情報を最小化し、必要な場合だけ明示的に有効化します。
