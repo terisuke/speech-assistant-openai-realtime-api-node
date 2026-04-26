@@ -24,7 +24,16 @@ const {
     VAD_SILENCE_DURATION_MS = '700',
     VAD_EAGERNESS = 'low',
     LOG_TRANSCRIPTS = 'false',
-    LOG_OPENAI_RESPONSES = 'false'
+    LOG_OPENAI_RESPONSES = 'false',
+    SYSTEM_MESSAGE = [
+        'あなたは日本のコールセンターで電話一次受付を担当するAIオペレーターです。',
+        '必ず自然で丁寧な日本語だけで応答してください。英語では応答しません。',
+        '相手の発話が聞き取れない場合は、推測せず「恐れ入ります。もう一度お話しいただけますか」と確認してください。',
+        '一度に複数の質問をせず、用件、名前、折り返し電話番号、希望日時などを一つずつ確認してください。',
+        '会話を勝手に終了せず、必要に応じて担当者へ引き継ぐ旨を伝えてください。',
+        'まだ社名や業務ナレッジが未設定のため、断定できない内容は「確認して折り返します」と案内してください。'
+    ].join('\n'),
+    FIRST_MESSAGE = 'お電話ありがとうございます。AI受付です。どのようなご用件でしょうか。'
 } = process.env;
 
 if (!OPENAI_API_KEY) {
@@ -38,8 +47,6 @@ fastify.register(fastifyFormBody);
 fastify.register(fastifyWs);
 
 // 定数の設定
-const SYSTEM_MESSAGE = 'ここにシステムメッセージを書く';
-// 例：`あなたは居酒屋まほろばー の AI 受付係です。あなたの仕事は、飲食店を利用したい顧客と丁寧に対話し、名前、電話番号、来店予定日を入手することです。一度で 1 つずつ質問してください。会話はフレンドリーでプロフェッショナルなままであることを確認し、ユーザーがこれらの詳細を自然に提供できるように誘導します。相手は日本人なので、日本語以外の返答が返ってきた時は、日本語の返答が返ってくるまで質問を繰り返してください。';
 const PORT_NUMBER = Number(PORT);
 const SHOULD_LOG_TRANSCRIPTS = LOG_TRANSCRIPTS === 'true';
 const SHOULD_RUN_EXTRACTION = EXTRACTION_ENABLED === 'true';
@@ -119,10 +126,6 @@ fastify.get('/health', async (request, reply) => {
 fastify.all('/incoming-call', async (request, reply) => {
     console.log('Incoming call');
 
-    // 固定の最初のメッセージを設定（必要に応じて変更してください）
-    const firstMessage = '最初に言ってほしいことをここに書く';
-    // 例：こんにちは、まほろばー店のAI受付係です。どのようにお手伝いできますか？
-
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
                               <Response>
                                   <Connect>
@@ -148,9 +151,6 @@ fastify.register(async (fastify) => {
             }
         });
 
-        // 固定の最初のメッセージを設定
-        const firstMessage = 'こんにちは、まほろばー店のAI受付係です。どのようにお手伝いできますか？';
-
         const sendSessionUpdate = () => {
             const sessionUpdate = {
                 type: 'session.update',
@@ -166,13 +166,16 @@ fastify.register(async (fastify) => {
             console.log('Connected to the OpenAI Realtime API');
             setTimeout(() => {
                 sendSessionUpdate();
-                // 最初のメッセージをOpenAIに送信
+                // 通話開始時の挨拶を、顧客へ向けた日本語音声として生成する。
                 const queuedFirstMessage = {
                     type: 'conversation.item.create',
                     item: {
                         type: 'message',
                         role: 'user',
-                        content: [{ type: 'input_text', text: firstMessage }]
+                        content: [{
+                            type: 'input_text',
+                            text: `通話が開始しました。顧客に向けて、次の挨拶を自然な日本語で読み上げ、その後は顧客の返答を待ってください。「${FIRST_MESSAGE}」`
+                        }]
                     }
                 };
                 openAiWs.send(JSON.stringify(queuedFirstMessage));
