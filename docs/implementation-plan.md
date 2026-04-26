@@ -74,6 +74,8 @@ Sub-issues:
 
 ## Initial Work Order
 
+Wave 1 is detailed in [wave-1-local-voice-loop-plan.md](./wave-1-local-voice-loop-plan.md).
+
 1. Fix local startup and dependency issues.
 2. Add a minimal smoke-test script for `/`, `/incoming-call`, and Realtime connection configuration.
 3. Update OpenAI Realtime model/session config behind environment variables.
