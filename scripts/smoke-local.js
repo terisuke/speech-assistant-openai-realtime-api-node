@@ -1,4 +1,4 @@
-const baseUrl = process.env.SMOKE_BASE_URL || 'http://localhost:5050';
+const baseUrl = process.env.SMOKE_BASE_URL || 'http://127.0.0.1:5050';
 const smokeUrl = new URL(baseUrl);
 
 async function assertOk(name, check) {
@@ -22,7 +22,7 @@ await assertOk('root endpoint', async () => {
 });
 
 await assertOk('health endpoint', async () => {
-    const response = await fetch(`${baseUrl}/healthz`);
+    const response = await fetch(`${baseUrl}/health`);
     if (!response.ok) throw new Error(`Expected 2xx, got ${response.status}`);
     const body = await response.json();
     if (body.status !== 'ok') throw new Error('Unexpected health response body');

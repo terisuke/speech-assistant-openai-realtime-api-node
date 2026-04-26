@@ -111,6 +111,10 @@ fastify.get('/healthz', async (request, reply) => {
     reply.send({ status: 'ok' });
 });
 
+fastify.get('/health', async (request, reply) => {
+    reply.send({ status: 'ok' });
+});
+
 // Twilioが着信を処理するルート
 fastify.all('/incoming-call', async (request, reply) => {
     console.log('Incoming call');
@@ -282,7 +286,7 @@ fastify.register(async (fastify) => {
 });
 
 // サーバーを起動
-fastify.listen({ port: PORT_NUMBER }, (err) => {
+fastify.listen({ port: PORT_NUMBER, host: '0.0.0.0' }, (err) => {
     if (err) {
         console.error(err);
         process.exit(1);
