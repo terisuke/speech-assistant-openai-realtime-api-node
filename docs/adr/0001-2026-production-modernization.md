@@ -1,86 +1,83 @@
-# ADR 0001: 2026 Production Modernization
+# ADR 0001: 2026年版プロダクション移行
 
-- Status: Proposed
-- Date: 2026-04-26
-- Supersedes: initial prototype-only deployment assumptions
-- Scope: OpenAI Realtime, Twilio telephony, React admin UI, human handoff, Cloud Run deployment, Japanese `050` launch
+- ステータス: 提案中
+- 日付: 2026-04-26
+- 対象: OpenAI Realtime、Twilio電話連携、React管理画面、人間への引き継ぎ、Cloud Run、050番号
 
-## Context
+## 背景
 
-The current repository is a single-file Node.js prototype. It accepts Twilio Voice calls, opens a bidirectional Media Stream WebSocket, forwards audio to the OpenAI Realtime API, and logs a post-call transcript extraction. That design proved the concept, but it does not yet support production operation.
+現行リポジトリは、単一の `index.js` でTwilio Voice着信を受け、Media StreamsをOpenAI Realtime APIへ中継するプロトタイプです。概念実証としては成立していますが、日本のコールセンターで運用するには、デプロイ、監視、設定管理、通話引き継ぎ、個人情報保護が不足しています。
 
-The product now needs five capabilities:
+解決すべき主要課題は次の通りです。
 
-1. Move from a Replit/ngrok-style workflow to a reproducible cloud deployment.
-2. Add an operator UI for call monitoring, logs, assistant settings, and knowledge/RAG input.
-3. Launch on a Japanese `050` phone number.
-4. Tune VAD/noise handling so ambient noise does not trigger listening too aggressively.
-5. Refresh stale OpenAI API/model usage and general code structure.
+1. Replit/ngrok前提から、再現可能なクラウド運用へ移行する。
+2. 通話監視、ログ、プロンプト、VAD、ナレッジ/RAGを管理できるReact UIを作る。
+3. 日本の `050` 番号で着信運用する。
+4. 周囲音で誤反応しにくいVAD/ノイズ低減設定にする。
+5. OpenAI Realtime API、モデル、イベント形状を2026年4月時点のGA仕様へ更新する。
+6. AIが対応困難と判断した場合、人間オペレーターが画面から通話へ参加できるようにする。
 
-A sixth architectural requirement follows from the operator workflow: when the AI escalates a call, a human operator should be able to join from the React UI and talk to the customer directly.
+## 決定
 
-## Decision
+実装は段階的に進め、`050` 番号の恒久切替は最後に行います。
 
-Modernize incrementally while keeping the phone number cutover last.
+1. 既存のOpenAI APIキーとTwilio番号で、まずローカル通話ループを検証する。
+2. PSTN/050通話の本線は、Twilio Voice -> Node/Fastify -> OpenAI Realtime WebSocket のサーバー側経路を維持する。
+3. React + TypeScriptでオペレーターコンソールを作る。対象は通話監視、ログ、設定、ナレッジ、VAD、引き継ぎ操作。
+4. サーバーからReactへ、WebSocketまたはSSEで通話状態、文字起こし、VAD、AIイベント、パスアップ通知を配信する。
+5. 人間オペレーターのブラウザ通話にはTwilio Voice JavaScript SDKを使う。これはブラウザとTwilio間のWebRTCであり、顧客電話を直接ブラウザへつなぐものではない。
+6. AI/顧客/オペレーターの管理にはTwilio Conferenceを使う。これにより参加、ミュート、削除、保留、将来のコーチングが扱いやすくなる。
+7. Realtimeモデルは `gpt-realtime-1.5` を既定とし、モデル名、音声、文字起こし、VAD、抽出モデルは環境変数または設定として管理する。
+8. 本番はGoogle Cloud Runへデプロイし、秘密情報はSecret Managerへ置く。WebSocket長時間接続のtimeoutと再接続方針を明記する。
 
-1. First restore and validate the current local call path with the existing OpenAI API key and Twilio test/current number. Do not move the `050` number until the end-to-end voice path is verified.
-2. Keep the production phone-call path server-side: Twilio Voice -> Node/Fastify -> OpenAI Realtime over WebSocket. This is the right shape for PSTN/`050` calls.
-3. Add React + TypeScript for the operator console. React owns monitoring, logs, assistant configuration, knowledge/RAG input, VAD profile selection, and handoff controls.
-4. Add a backend event channel from server to React using WebSocket or SSE. It should stream call state, transcripts, AI events, VAD events, escalation requests, and operator actions.
-5. Use Twilio Voice JavaScript SDK for browser-based human operator audio. This introduces WebRTC between the operator browser and Twilio, not between the customer phone and the browser directly.
-6. Use Twilio Conference/call-control semantics for handoff. Prefer a conference-centered design where the customer, AI bridge, and human operator can be managed as participants. This enables join, mute, hold, remove, and potential coaching/monitoring behavior.
-7. Use OpenAI Realtime `gpt-realtime` or the current supported realtime model at implementation time. Model, voice, transcription, VAD, and extraction settings must be configuration, not source-code constants.
-8. Deploy the backend/admin service to Google Cloud Run. Cloud Run supports WebSockets, but long streams require explicit timeout, reconnect behavior, and no end-to-end HTTP/2. Secrets belong in Secret Manager.
-
-## Target Architecture
+## 目標アーキテクチャ
 
 ```text
-050 customer call
+050顧客通話
   -> Twilio Voice / Conference
   -> backend Twilio webhook + Media Stream WebSocket
   -> OpenAI Realtime WebSocket
-  -> AI speech response back to Twilio
+  -> AI音声応答をTwilioへ返送
 
-React operator console
-  -> backend REST API for config, knowledge, sessions, logs
-  -> backend event stream for live call state
-  -> Twilio Voice JS SDK for operator WebRTC softphone
-  -> Twilio Conference participant control through backend
+Reactオペレーターコンソール
+  -> 設定、ナレッジ、通話履歴のREST API
+  -> 通話状態のリアルタイムイベント
+  -> Twilio Voice SDKによるWebRTCソフトフォン
+  -> backend経由のConference参加者制御
 ```
 
-## Rollout Order
+## ロールアウト順序
 
-1. Local baseline: fix startup blockers, validate OpenAI key, validate current Twilio/ngrok call path.
-2. API refresh: update Realtime model/session shape, transcription settings, structured extraction, and config loading.
-3. VAD tuning: add named profiles, noise reduction settings, speech event logging, and comparison tests.
-4. React console: create authenticated UI for live call monitoring, logs, assistant settings, VAD profile, and knowledge input.
-5. Handoff: implement AI escalation events, operator notification, Twilio Voice SDK browser softphone, and Conference participant controls.
-6. Cloud Run: containerize, wire Secret Manager, configure WebSocket timeout/reconnect posture, and add deployment docs.
-7. Japanese launch: switch the `050` number webhook to Cloud Run only after the verified production URL is stable.
+1. Wave 1: ローカル起動、OpenAI Realtime、Twilio Media Streams、050実着信を検証する。
+2. Wave 2: TypeScript化、設定スキーマ、Realtime GA仕様、VADプロファイルを整備する。
+3. Wave 3: React管理画面、通話状態イベント、ログ表示、設定編集を実装する。
+4. Wave 4: RAG/ナレッジ投入、参照元表示、監査ログを実装する。
+5. Wave 5: Twilio Voice SDKとConferenceで人間への引き継ぎを実装する。
+6. Wave 6: Cloud Run、Secret Manager、監視、署名検証を整備する。
+7. Wave 7: 050番号を本番URLへ恒久切替する。
 
-## Acceptance Criteria
+## 受け入れ条件
 
-- A local test call works before cloud deployment starts.
-- All model names and realtime/session/VAD settings are configurable.
-- React can show live call state and transcript updates.
-- Operators can receive an AI escalation request and join the customer call from the browser.
-- Cloud Run deployment can handle Twilio WebSocket traffic for expected call duration.
-- The `050` number is switched only after Cloud Run, Twilio webhook verification, and Japanese call-flow tests pass.
+- Cloud Run前に、ローカルで実050着信からOpenAI Realtime音声応答まで確認済みである。
+- Realtimeの `session.update` はGA形状を使う。
+- React画面で通話状態と文字起こしを確認できる。
+- AIのパスアップを受け、人間オペレーターがブラウザから参加できる。
+- Cloud Run上で想定通話時間のWebSocket接続が維持できる。
+- 050番号は本番URL、署名検証、日本語通話テスト完了後に切り替える。
 
-## Consequences
+## 影響
 
-- This is a larger refactor than updating model strings, but it preserves the safest launch order.
-- Browser WebRTC is introduced for human operators, while server WebSockets remain the phone AI path.
-- Conference-based handoff adds Twilio complexity but avoids brittle one-off call transfer behavior.
-- The admin/RAG layer requires authentication, persistence, audit logging, and privacy controls.
+- 単なるモデル名変更より大きな改修になるが、プロトタイプの前提を本番へ持ち込まずに済む。
+- 電話AI本線はWebSocket、人間オペレーター参加はWebRTCという役割分担になる。
+- Conference制御によりTwilio実装は複雑になるが、引き継ぎや将来拡張が安定する。
+- 管理画面とRAGにより、認証、永続化、監査、個人情報保護が必須になる。
 
-## References
+## 参考
 
 - OpenAI Realtime model: https://developers.openai.com/api/docs/models/gpt-realtime
 - OpenAI Realtime VAD: https://developers.openai.com/api/docs/guides/realtime-vad
-- OpenAI Realtime WebRTC: https://platform.openai.com/docs/guides/realtime-webrtc
+- OpenAI Realtime WebSocket: https://developers.openai.com/api/docs/guides/realtime-websocket
 - Google Cloud Run WebSockets: https://docs.cloud.google.com/run/docs/triggering/websockets
-- Google Cloud Run secrets: https://docs.cloud.google.com/run/docs/configuring/services/secrets
 - Twilio Media Streams: https://www.twilio.com/docs/voice/media-streams
 - Twilio Voice JavaScript SDK: https://www.twilio.com/docs/voice/client/javascript
-- Twilio Voice Conference: https://www.twilio.com/docs/voice/conference
+- Twilio Conference: https://www.twilio.com/docs/voice/conference

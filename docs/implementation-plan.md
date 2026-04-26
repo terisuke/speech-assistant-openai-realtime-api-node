@@ -1,86 +1,96 @@
-# Implementation Plan
+# 実装計画
 
-This plan turns the modernization ADRs into GitHub implementation epics and sub-issues.
+この文書は、2026年版プロダクション移行ADRをGitHub issueと実装Waveへ落とし込むための計画です。
 
-## Principles
+## 原則
 
-- Keep the `050` number cutover last.
-- Validate the current local voice loop before cloud deployment.
-- Keep PSTN voice traffic server-side with Twilio Media Streams and OpenAI Realtime WebSocket.
-- Use React for the operator console and Twilio Voice SDK WebRTC for human operator participation.
-- Treat settings, models, VAD, knowledge, and phone routing as configuration.
+- `050` 番号の恒久切替は最後に行う。
+- Cloud Run前に、ローカルで実050着信の音声ループを検証する。
+- 電話AI本線はTwilio Media StreamsとOpenAI Realtime WebSocketでサーバー側に置く。
+- Reactは監視、設定、ナレッジ、引き継ぎのために使う。
+- 人間オペレーターの通話参加にはTwilio Voice SDKのWebRTCを使う。
+- モデル、VAD、音声、電話番号、ナレッジは設定として扱う。
 
-## Epic Structure
+## エピック
 
-### Epic: 2026 Production Modernization
+### Epic: 2026年版プロダクション移行
 
 GitHub tracking issue: #20
 
-Owns the full migration from prototype to production-ready voice assistant.
+プロトタイプを、日本のコールセンターで使える音声AI受付システムへ移行します。
 
-Sub-issues:
+サブissue:
 
-1. #8 Local baseline and smoke tests.
-2. #6 TypeScript/backend module split.
-3. #7 OpenAI Realtime API/model refresh.
-4. #10 VAD and noise-reduction profiles.
-5. #9 Twilio local/current-number validation.
-6. #12 React operator console shell.
-7. #11 Live call event stream and call-state store.
-8. #14 Knowledge/RAG ingestion and retrieval.
-9. #13 Twilio Voice SDK operator softphone.
-10. #15 AI escalation detection and handoff workflow.
-11. #17 Twilio Conference participant control.
-12. #16 Cloud Run deployment and Secret Manager.
-13. #19 Observability, privacy, and audit logs.
-14. #18 Japanese `050` number cutover.
+1. #8 ローカル起動とスモークテスト
+2. #6 TypeScript化とbackend分割
+3. #7 OpenAI Realtime API/モデル更新
+4. #10 VAD/ノイズ低減プロファイル
+5. #9 Twilioローカル/現行番号検証
+6. #12 Reactオペレーターコンソール
+7. #11 通話状態イベントストリーム
+8. #14 ナレッジ/RAG投入と検索
+9. #13 Twilio Voice SDKソフトフォン
+10. #15 AIパスアップ判定と通知
+11. #17 Twilio Conference参加者制御
+12. #16 Cloud RunとSecret Manager
+13. #19 ログ、監査、プライバシー制御
+14. #18 日本の050番号本番切替
 
-## Milestones
+## Wave
 
-### Milestone 1: Local Voice Loop
+### Wave 1: ローカル音声ループ検証
 
-- App starts locally without import/dependency errors.
-- Existing OpenAI API key can create a realtime session.
-- Existing/current Twilio number or test TwiML app can reach local ngrok endpoint.
-- A call can complete one AI turn.
+- ローカルサーバーが起動する。
+- OpenAI APIキーでRealtime GAセッションが作成できる。
+- Twilio Media Streams互換のWebSocket経路が通る。
+- ngrok経由で050番号からローカルへ着信できる。
+- AI音声応答がTwilioへ返る。
 
-### Milestone 2: Modern Backend
+### Wave 2: backend基盤更新
 
-- TypeScript project structure is in place.
-- Config schema validates required secrets and model settings.
-- Realtime session code uses supported model/session settings.
-- VAD profiles are configurable and testable.
+- TypeScript化する。
+- 設定スキーマを追加する。
+- Realtimeモデル、音声、文字起こし、VADを設定化する。
+- 最低限のテスト基盤を整える。
 
-### Milestone 3: Operator Console
+### Wave 3: React管理画面
 
-- React console is authenticated.
-- Live call list and transcript panel receive backend events.
-- Assistant settings and knowledge documents can be managed from UI.
+- 認証付きの管理画面を作る。
+- 通話一覧、通話詳細、文字起こし、Realtimeイベントを表示する。
+- assistant設定とVADプロファイルを編集できるようにする。
 
-### Milestone 4: Human Handoff
+### Wave 4: ナレッジ/RAG
 
-- AI can emit an escalation event.
-- Operator receives notification in the console.
-- Operator joins through Twilio Voice SDK.
-- Backend can mute/remove AI and manage conference participants.
+- ナレッジ文書を投入できる。
+- インデックス状態を表示する。
+- AI応答に参照元を紐づける。
 
-### Milestone 5: Production Launch
+### Wave 5: 人間への引き継ぎ
 
-- Cloud Run service is deployed with Secret Manager.
-- WebSocket timeout/reconnect posture is documented and tested.
-- Webhook signature verification is enabled.
-- `050` number points to the production Cloud Run URL.
-- Japanese call-flow test passes.
+- AIがパスアップイベントを出す。
+- オペレーターがReact画面で通知を受ける。
+- Twilio Voice SDKでブラウザから通話へ参加する。
+- Twilio ConferenceでAIのミュート/退出を制御する。
 
-## Initial Work Order
+### Wave 6: Cloud Run本番基盤
 
-1. Fix local startup and dependency issues.
-2. Add a minimal smoke-test script for `/`, `/incoming-call`, and Realtime connection configuration.
-3. Update OpenAI Realtime model/session config behind environment variables.
-4. Add VAD profile config and speech-event logging.
-5. Introduce TypeScript structure without changing external behavior.
-6. Add React console skeleton and backend session-event stream.
-7. Add Twilio Voice SDK operator token endpoint and browser softphone proof of concept.
-8. Move call flow to Conference-based handoff.
-9. Deploy to Cloud Run staging.
-10. Switch the `050` number after staging call tests pass.
+- Docker化する。
+- Secret Managerへ秘密情報を移す。
+- WebSocket timeoutと再接続方針を検証する。
+- webhook署名検証を有効化する。
+
+### Wave 7: 050番号本番切替
+
+- 本番Cloud Run URLへ050番号を向ける。
+- 日本語通話シナリオを検証する。
+- ロールバック手順を確認する。
+
+## 初期作業順序
+
+1. ローカル起動エラーを修正する。
+2. `/`, `/healthz`, `/incoming-call` のスモーク検証を追加する。
+3. `gpt-realtime-1.5` とGA `session.update` を検証する。
+4. Media Streams互換WebSocketの疑似検証を追加する。
+5. 050実着信をngrok経由で確認する。
+6. 検証証跡をToEとして残す。
+7. 次のPRでTypeScript化と設定スキーマへ進む。
