@@ -62,12 +62,22 @@ npm install
 cp .env.example .env
 ```
 
-`.env`ファイルで、`OPENAI_API_KEY`を**必要条件**で指定されたOpenAI APIキーに更新します。
+`.env`ファイルで、`OPENAI_API_KEY`を**必要条件**で指定されたOpenAI APIキーに更新します。Realtime APIの疎通確認には有効なAPIキーが必要です。
 
 ## アプリを実行
 ngrokが動作し、依存関係がインストールされ、Twilioが適切に設定され、`.env`が設定された後、以下のコマンドで開発サーバーを実行します：
 ```
-node index.js
+npm run start
+```
+
+ローカルのHTTP/TwiMLだけを確認する場合は、サーバー起動後に別のターミナルで以下を実行します：
+```
+npm run smoke:local
+```
+
+OpenAI Realtime APIへのWebSocket接続だけを確認する場合は、以下を実行します：
+```
+npm run check:realtime
 ```
 ## アプリをテスト
 開発サーバーが動作している間に、**必要条件**で購入した電話番号に電話をかけてください。紹介後、AIアシスタントと話すことができます。楽しんでください！
