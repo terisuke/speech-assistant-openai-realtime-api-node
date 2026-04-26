@@ -38,6 +38,8 @@ const {
         '必ず自然で丁寧な日本語だけで応答してください。英語では応答しません。',
         '相手の発話が聞き取れない場合は、推測せず「恐れ入ります。もう一度お話しいただけますか」と確認してください。',
         '一度に複数の質問をせず、用件、名前、折り返し電話番号、希望日時などを一つずつ確認してください。',
+        '氏名は聞こえた読みをそのままカタカナで確認してください。一般的な漢字名へ勝手に変換しないでください。',
+        '氏名が少しでも不確かな場合は「お名前の読みをカタカナで確認させてください」と聞き返してください。',
         '会話を勝手に終了せず、必要に応じて担当者へ引き継ぐ旨を伝えてください。',
         'まだ社名や業務ナレッジが未設定のため、断定できない内容は「確認して折り返します」と案内してください。'
     ].join('\n'),
@@ -75,6 +77,18 @@ const escapeXml = (value = '') => String(value)
     .replaceAll("'", '&apos;')
     .replaceAll('<', '&lt;')
     .replaceAll('>', '&gt;');
+
+const appendTurn = (session, role, text) => {
+    const normalizedText = String(text || '').trim();
+    if (!normalizedText || normalizedText === 'Agent message not found') return;
+
+    const lastTurn = session.turns.at(-1);
+    if (lastTurn?.role === role && lastTurn.text === normalizedText) return;
+
+    const label = role === 'agent' ? 'Agent' : 'User';
+    session.transcript += `${label}: ${normalizedText}\n`;
+    session.turns.push({ role, text: normalizedText, at: new Date().toISOString() });
+};
 
 const buildTurnDetectionConfig = () => {
     if (VAD_TYPE === 'semantic_vad') {
@@ -234,29 +248,14 @@ fastify.register(async (fastify) => {
                 // ユーザーの音声認識結果を処理
                 if (response.type === 'conversation.item.input_audio_transcription.completed') {
                     const userMessage = response.transcript.trim();
-                    session.transcript += `User: ${userMessage}\n`;
-                    session.turns.push({ role: 'user', text: userMessage, at: new Date().toISOString() });
-                    if (SHOULD_LOG_TRANSCRIPTS) console.log(`User (${sessionId}): ${userMessage}`);
-                }
-
-                // エージェントの応答を処理
-                if (response.type === 'response.done') {
-                    const output = response.response.output || [];
-                    const agentMessage = output
-                        .flatMap(item => item.content || [])
-                        .find(content => content.transcript || content.text)?.transcript;
-                    if (agentMessage) {
-                        session.transcript += `Agent: ${agentMessage}\n`;
-                        session.turns.push({ role: 'agent', text: agentMessage, at: new Date().toISOString() });
-                        if (SHOULD_LOG_TRANSCRIPTS) console.log(`Agent (${sessionId}): ${agentMessage}`);
-                    }
+                    appendTurn(session, 'user', userMessage);
+                    if (SHOULD_LOG_TRANSCRIPTS && userMessage) console.log(`User (${sessionId}): ${userMessage}`);
                 }
 
                 if (response.type === 'response.output_audio_transcript.done') {
-                    const agentMessage = response.transcript || 'Agent message not found';
-                    session.transcript += `Agent: ${agentMessage}\n`;
-                    session.turns.push({ role: 'agent', text: agentMessage, at: new Date().toISOString() });
-                    if (SHOULD_LOG_TRANSCRIPTS) console.log(`Agent (${sessionId}): ${agentMessage}`);
+                    const agentMessage = response.transcript || '';
+                    appendTurn(session, 'agent', agentMessage);
+                    if (SHOULD_LOG_TRANSCRIPTS && agentMessage) console.log(`Agent (${sessionId}): ${agentMessage}`);
                 }
 
                 if (response.type === 'session.updated') {
@@ -367,7 +366,12 @@ async function extractCallDetails(transcript) {
                 input: [
                     {
                         role: 'system',
-                        content: 'あなたは日本のコールセンター通話ログを構造化するオペレーターです。事実だけを抽出し、不明な項目は空文字またはfalseにしてください。'
+                        content: [
+                            'あなたは日本のコールセンター通話ログを構造化するオペレーターです。',
+                            '事実だけを抽出し、不明な項目は空文字またはfalseにしてください。',
+                            '顧客名は、通話中で最後に本人が訂正または確認した読みを優先してください。',
+                            '顧客名は推測で一般的な漢字へ変換せず、文字起こしにカタカナやひらがながある場合はその表記を優先してください。'
+                        ].join('\n')
                     },
                     {
                         role: 'user',

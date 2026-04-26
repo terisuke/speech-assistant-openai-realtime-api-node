@@ -21,6 +21,8 @@
 - 顧客名、顧客電話番号、希望日時
 - 切断理由、OpenAI接続エラー
 
+Google Sheetsの開始時刻・終了時刻は日本時間（Asia/Tokyo）の `YYYY-MM-DD HH:mm:ss` 形式で表示します。FirestoreにはUTC ISO文字列とJST表示文字列の両方を保存します。
+
 ## Cloud Run環境変数
 
 ```text
@@ -43,4 +45,3 @@ GOOGLE_SHEETS_SPREADSHEET_ID=11klH3hxWcIWKLOVTBJGxPjATG5aai0a6D8z_F6yUO1A
 ## 次の拡張
 
 Sheets確認後、React管理画面でFirestoreを直接表示します。分析用途が増えた段階でBigQueryへの同期を追加します。
-
