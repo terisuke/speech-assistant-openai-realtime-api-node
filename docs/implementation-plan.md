@@ -14,24 +14,26 @@ This plan turns the modernization ADRs into GitHub implementation epics and sub-
 
 ### Epic: 2026 Production Modernization
 
+GitHub tracking issue: #20
+
 Owns the full migration from prototype to production-ready voice assistant.
 
 Sub-issues:
 
-1. Local baseline and smoke tests.
-2. TypeScript/backend module split.
-3. OpenAI Realtime API/model refresh.
-4. VAD and noise-reduction profiles.
-5. Twilio local/current-number validation.
-6. React operator console shell.
-7. Live call event stream and call-state store.
-8. Knowledge/RAG ingestion and retrieval.
-9. Twilio Voice SDK operator softphone.
-10. AI escalation detection and handoff workflow.
-11. Twilio Conference participant control.
-12. Cloud Run deployment and Secret Manager.
-13. Observability, privacy, and audit logs.
-14. Japanese `050` number cutover.
+1. #8 Local baseline and smoke tests.
+2. #6 TypeScript/backend module split.
+3. #7 OpenAI Realtime API/model refresh.
+4. #10 VAD and noise-reduction profiles.
+5. #9 Twilio local/current-number validation.
+6. #12 React operator console shell.
+7. #11 Live call event stream and call-state store.
+8. #14 Knowledge/RAG ingestion and retrieval.
+9. #13 Twilio Voice SDK operator softphone.
+10. #15 AI escalation detection and handoff workflow.
+11. #17 Twilio Conference participant control.
+12. #16 Cloud Run deployment and Secret Manager.
+13. #19 Observability, privacy, and audit logs.
+14. #18 Japanese `050` number cutover.
 
 ## Milestones
 
