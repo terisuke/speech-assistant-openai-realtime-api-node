@@ -4,6 +4,13 @@ import dotenv from 'dotenv';
 import fastifyFormBody from '@fastify/formbody';
 import fastifyWs from '@fastify/websocket';
 import { buildCallLogRecord, CallLogSinks } from './lib/call-log-sinks.js';
+import {
+    auditLog,
+    getTwilioWebhookUrl,
+    maskPhone,
+    shouldValidateTwilioSignature,
+    validateTwilioSignature
+} from './lib/security.js';
 
 // .envファイルから環境変数を読み込む
 dotenv.config();
@@ -25,7 +32,11 @@ const {
     VAD_SILENCE_DURATION_MS = '700',
     VAD_EAGERNESS = 'low',
     LOG_TRANSCRIPTS = 'false',
+    LOG_REALTIME_EVENTS = 'false',
     LOG_OPENAI_RESPONSES = 'false',
+    TWILIO_AUTH_TOKEN = '',
+    TWILIO_SIGNATURE_VALIDATION_ENABLED = 'false',
+    TWILIO_WEBHOOK_URL = '',
     GOOGLE_CLOUD_PROJECT = 'aipartner-426616',
     CALL_LOG_FIRESTORE_ENABLED = 'false',
     CALL_LOG_FIRESTORE_DATABASE_ID = 'speech-assistant-logs',
@@ -59,8 +70,10 @@ fastify.register(fastifyWs);
 // 定数の設定
 const PORT_NUMBER = Number(PORT);
 const SHOULD_LOG_TRANSCRIPTS = LOG_TRANSCRIPTS === 'true';
+const SHOULD_LOG_REALTIME_EVENTS = LOG_REALTIME_EVENTS === 'true';
 const SHOULD_RUN_EXTRACTION = EXTRACTION_ENABLED === 'true';
 const SHOULD_LOG_OPENAI_RESPONSES = LOG_OPENAI_RESPONSES === 'true';
+const SHOULD_VALIDATE_TWILIO_SIGNATURE = shouldValidateTwilioSignature(TWILIO_SIGNATURE_VALIDATION_ENABLED);
 const callLogSinks = new CallLogSinks({
     firestoreEnabled: CALL_LOG_FIRESTORE_ENABLED,
     firestoreDatabaseId: CALL_LOG_FIRESTORE_DATABASE_ID,
@@ -163,9 +176,40 @@ fastify.get('/health', async (request, reply) => {
 
 // Twilioが着信を処理するルート
 fastify.all('/incoming-call', async (request, reply) => {
-    console.log('Incoming call');
+    const signature = request.headers['x-twilio-signature'];
+    const webhookUrl = getTwilioWebhookUrl(request, TWILIO_WEBHOOK_URL);
+    const callSid = request.body?.CallSid || '';
     const from = escapeXml(request.body?.From || '');
     const to = escapeXml(request.body?.To || '');
+
+    if (SHOULD_VALIDATE_TWILIO_SIGNATURE) {
+        const isValid = validateTwilioSignature({
+            authToken: TWILIO_AUTH_TOKEN,
+            signature,
+            url: webhookUrl,
+            params: request.body || {}
+        });
+
+        if (!isValid) {
+            auditLog('twilio.webhook.rejected', {
+                actor: 'twilio',
+                target: callSid || 'incoming-call',
+                result: 'failure',
+                metadata: { reason: 'invalid_signature', hasSignature: Boolean(signature) }
+            });
+            return reply.code(403).send('Forbidden');
+        }
+    }
+
+    auditLog('twilio.webhook.accepted', {
+        actor: 'twilio',
+        target: callSid || 'incoming-call',
+        metadata: {
+            signatureValidation: SHOULD_VALIDATE_TWILIO_SIGNATURE,
+            from: maskPhone(request.body?.From),
+            to: maskPhone(request.body?.To)
+        }
+    });
 
     const twimlResponse = `<?xml version="1.0" encoding="UTF-8"?>
                               <Response>
@@ -183,7 +227,7 @@ fastify.all('/incoming-call', async (request, reply) => {
 // メディアストリーム用のWebSocketルート
 fastify.register(async (fastify) => {
     fastify.get('/media-stream', { websocket: true }, (connection, req) => {
-        console.log('Client connected');
+        console.log('Media stream connected');
 
         const sessionId = req.headers['x-twilio-call-sid'] || `session_${Date.now()}`;
         let session = sessions.get(sessionId) || {
@@ -209,7 +253,7 @@ fastify.register(async (fastify) => {
                 session: buildRealtimeSessionConfig()
             };
 
-            console.log('Sending session update:', JSON.stringify(sessionUpdate));
+            console.log(`Sending Realtime session update for model ${REALTIME_MODEL}`);
             openAiWs.send(JSON.stringify(sessionUpdate));
         };
 
@@ -241,8 +285,8 @@ fastify.register(async (fastify) => {
             try {
                 const response = JSON.parse(data);
 
-                if (LOG_EVENT_TYPES.includes(response.type)) {
-                    console.log(`Received event: ${response.type}`, response);
+                if (SHOULD_LOG_REALTIME_EVENTS && LOG_EVENT_TYPES.includes(response.type)) {
+                    console.log(`Received Realtime event: ${response.type}`);
                 }
 
                 // ユーザーの音声認識結果を処理
@@ -259,7 +303,7 @@ fastify.register(async (fastify) => {
                 }
 
                 if (response.type === 'session.updated') {
-                    console.log('Session updated successfully:', response);
+                    console.log('Realtime session updated successfully');
                 }
 
                 if ((response.type === 'response.output_audio.delta' || response.type === 'response.audio.delta') && response.delta) {
@@ -271,7 +315,7 @@ fastify.register(async (fastify) => {
                     connection.send(JSON.stringify(audioDelta));
                 }
             } catch (error) {
-                console.error('Error processing OpenAI message:', error, 'Raw message:', data);
+                console.error('Error processing OpenAI message:', error.message);
             }
         });
 
@@ -298,6 +342,15 @@ fastify.register(async (fastify) => {
                         session.from = data.start.customParameters?.from || '';
                         session.to = data.start.customParameters?.to || '';
                         console.log('Incoming stream has started', session.streamSid);
+                        auditLog('call.started', {
+                            actor: 'twilio',
+                            target: session.callSid,
+                            metadata: {
+                                streamSid: session.streamSid,
+                                from: maskPhone(session.from),
+                                to: maskPhone(session.to)
+                            }
+                        });
                         callLogSinks.recordStarted(session);
                         break;
                     default:
@@ -305,7 +358,7 @@ fastify.register(async (fastify) => {
                         break;
                 }
             } catch (error) {
-                console.error('Error parsing message:', error, 'Message:', message);
+                console.error('Error parsing Twilio media message:', error.message);
             }
         });
 
@@ -324,6 +377,15 @@ fastify.register(async (fastify) => {
             const extraction = await processTranscriptAndSend(session.transcript, session.callSid || sessionId);
             const record = buildCallLogRecord(session, extraction);
             await callLogSinks.recordCompleted(record);
+            auditLog('call.completed', {
+                actor: 'twilio',
+                target: session.callSid || sessionId,
+                metadata: {
+                    durationSeconds: record.durationSeconds,
+                    callbackRequired: record.callbackRequired,
+                    hasTranscript: Boolean(record.transcript)
+                }
+            });
 
             // セッションのクリーンアップ
             sessions.delete(sessionId);

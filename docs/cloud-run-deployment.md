@@ -26,8 +26,8 @@ gcloud run deploy speech-assistant-realtime \
   --timeout 3600 \
   --cpu 1 \
   --memory 512Mi \
-  --set-secrets OPENAI_API_KEY=openai-api-key:latest \
-  --set-env-vars REALTIME_MODEL=gpt-realtime-1.5,TRANSCRIPTION_MODEL=gpt-4o-transcribe,EXTRACTION_MODEL=gpt-5.4-mini,EXTRACTION_ENABLED=true,VOICE=marin,AUDIO_FORMAT=audio/pcmu,AUDIO_NOISE_REDUCTION=near_field,VAD_TYPE=server_vad,VAD_THRESHOLD=0.65,VAD_PREFIX_PADDING_MS=300,VAD_SILENCE_DURATION_MS=700,VAD_EAGERNESS=low,LOG_TRANSCRIPTS=true,LOG_OPENAI_RESPONSES=false,GOOGLE_CLOUD_PROJECT=aipartner-426616,CALL_LOG_FIRESTORE_ENABLED=true,CALL_LOG_FIRESTORE_DATABASE_ID=speech-assistant-logs,CALL_LOG_FIRESTORE_COLLECTION=callLogs,CALL_LOG_SHEETS_ENABLED=true,GOOGLE_SHEETS_SPREADSHEET_ID=11klH3hxWcIWKLOVTBJGxPjATG5aai0a6D8z_F6yUO1A
+  --set-secrets OPENAI_API_KEY=openai-api-key:latest,TWILIO_AUTH_TOKEN=twilio-auth-token:latest \
+  --set-env-vars REALTIME_MODEL=gpt-realtime-1.5,TRANSCRIPTION_MODEL=gpt-4o-transcribe,EXTRACTION_MODEL=gpt-5.4-mini,EXTRACTION_ENABLED=true,VOICE=marin,AUDIO_FORMAT=audio/pcmu,AUDIO_NOISE_REDUCTION=near_field,VAD_TYPE=server_vad,VAD_THRESHOLD=0.65,VAD_PREFIX_PADDING_MS=300,VAD_SILENCE_DURATION_MS=700,VAD_EAGERNESS=low,LOG_TRANSCRIPTS=false,LOG_REALTIME_EVENTS=false,LOG_OPENAI_RESPONSES=false,TWILIO_SIGNATURE_VALIDATION_ENABLED=true,TWILIO_WEBHOOK_URL=https://speech-assistant-realtime-mggisi6odq-an.a.run.app/incoming-call,GOOGLE_CLOUD_PROJECT=aipartner-426616,CALL_LOG_FIRESTORE_ENABLED=true,CALL_LOG_FIRESTORE_DATABASE_ID=speech-assistant-logs,CALL_LOG_FIRESTORE_COLLECTION=callLogs,CALL_LOG_SHEETS_ENABLED=true,GOOGLE_SHEETS_SPREADSHEET_ID=11klH3hxWcIWKLOVTBJGxPjATG5aai0a6D8z_F6yUO1A
 ```
 
 ## CI/CD
@@ -65,4 +65,4 @@ Cloud Run実行サービスアカウント `639959525777-compute@developer.gserv
 
 - `--min-instances 1` により常時待機します。費用が発生するため、不要になったら0へ戻します。
 - Cloud RunのWebSocketはリクエストtimeoutの影響を受けます。現時点では `3600` 秒に設定します。
-- 本番ではTwilio webhook署名検証を追加してから050番号を恒久切替します。
+- Twilio webhook署名検証には、Twilio ConsoleのAccount Auth TokenをSecret Manager `twilio-auth-token` に保存する必要があります。
